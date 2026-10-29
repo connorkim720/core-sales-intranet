@@ -18,6 +18,7 @@ export const PAGE_META: Record<string, string> = {
   "/video-references": "영상 레퍼런스",
   "/agents": "에이전트 허브",
   "/agents/room": "에이전트 회의실",
+  "/agents/pepper": "페퍼 1:1 대화",
   "/agents/roster": "에이전트 관리",
   "/campaigns": "캠페인 운영",
   "/campaigns/tasks": "업무 보드",

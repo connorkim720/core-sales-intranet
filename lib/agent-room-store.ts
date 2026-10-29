@@ -20,9 +20,9 @@ const STORAGE_KEY = "core-sales-agent-room-v1";
 
 type Saved = { messages: RoomMessage[]; shared: Shared };
 
-function load(): Saved {
+function load(key: string): Saved {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(key);
     if (!raw) return { messages: [], shared: EMPTY_SHARED };
     const parsed = JSON.parse(raw);
     return {
@@ -37,11 +37,16 @@ function load(): Saved {
 export type RoomOptions = {
   mode: "demo" | "ai";
   passcode: string;
+  unlocked?: boolean; // 서버가 심어 준 잠금 해제 쿠키가 있으면 비밀번호 없이도 AI 모드로 동작
   reactions: boolean;
   roster: AgentDef[];
+  // 1:1 대화방용: 저장 키를 따로 쓰고, 모든 발언을 이 에이전트에게 보낸다(앞에 @이름을 붙여 엔진에 넘김).
+  storageKey?: string;
+  forceAgent?: string;
+  memory?: string; // 지난 대화 요약(배경 정보). AI 모드에서 모델에게만 덧붙인다.
 };
 
-const ERROR_TEXT: Record<string, string> = {
+export const ERROR_TEXT: Record<string, string> = {
   unauthorized: "회의실 비밀번호가 맞지 않습니다.",
   too_many_attempts: "비밀번호를 여러 번 틀려 잠시 막혔습니다. 잠시 뒤에 다시 시도하세요.",
   not_configured: "서버에 AI 설정(ANTHROPIC_API_KEY, ROOM_PASSCODE)이 없습니다.",
@@ -57,6 +62,7 @@ const ERROR_TEXT: Record<string, string> = {
 const FATAL = new Set(["unauthorized", "too_many_attempts", "not_configured", "rate_limited", "ai_auth", "ai_rate_limited", "network"]);
 
 export function useAgentRoom(ctx: RoomContext, options: RoomOptions) {
+  const storageKey = options.storageKey ?? STORAGE_KEY;
   const [messages, setMessages] = React.useState<RoomMessage[]>([]);
   const [shared, setShared] = React.useState<Shared>(EMPTY_SHARED);
   const [speaking, setSpeaking] = React.useState<AgentId | null>(null);
@@ -75,26 +81,26 @@ export function useAgentRoom(ctx: RoomContext, options: RoomOptions) {
   });
 
   React.useEffect(() => {
-    const saved = load();
+    const saved = load(storageKey);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMessages(saved.messages);
     messagesRef.current = saved.messages;
     setShared(saved.shared);
     sharedRef.current = saved.shared;
     setHydrated(true);
-  }, []);
+  }, [storageKey]);
 
   React.useEffect(() => {
     if (!hydrated) return;
     try {
       window.localStorage.setItem(
-        STORAGE_KEY,
+        storageKey,
         JSON.stringify({ messages: messages.slice(-MAX_MESSAGES), shared })
       );
     } catch {
       // 저장 실패는 무시 — 데모 편의 기능
     }
-  }, [messages, shared, hydrated]);
+  }, [messages, shared, hydrated, storageKey]);
 
   const push = React.useCallback((m: RoomMessage) => {
     messagesRef.current = [...messagesRef.current, m].slice(-MAX_MESSAGES);
@@ -113,6 +119,7 @@ export function useAgentRoom(ctx: RoomContext, options: RoomOptions) {
           roster: o.roster.map((r) => ({ name: r.name, role: r.role, team: r.team })),
           userText: a.userText,
           facts: a.facts,
+          memory: o.memory ?? "",
           transcript: a.transcript,
         }),
       });
@@ -134,7 +141,8 @@ export function useAgentRoom(ctx: RoomContext, options: RoomOptions) {
   }, []);
 
   const send = React.useCallback(
-    async (raw: string) => {
+    // extra: 화면에 보이는 말풍선에는 넣지 않고 엔진·모델에게만 덧붙이는 문구(예: 현재 페이지 정보)
+    async (raw: string, extra?: string) => {
       const text = raw.trim().slice(0, MAX_TEXT);
       if (!text || lock.current) return false;
       lock.current = true;
@@ -142,8 +150,10 @@ export function useAgentRoom(ctx: RoomContext, options: RoomOptions) {
       push({ id: `u${Date.now()}`, who: "user", text, ts: Date.now() });
       try {
         const o = optionsRef.current;
-        const ai = o.mode === "ai" && o.passcode.length > 0;
-        const next = await runRoomTurn(text, sharedRef.current, ctx, {
+        const ai = o.mode === "ai" && (o.passcode.length > 0 || o.unlocked === true);
+        const target = o.forceAgent ? o.roster.find((r) => r.id === o.forceAgent) : undefined;
+        const engineText = `${target ? `@${target.name} ` : ""}${text}${extra ? ` / ${extra}` : ""}`;
+        const next = await runRoomTurn(engineText, sharedRef.current, ctx, {
           onMessage: push,
           onSpeaking: setSpeaking,
           ...(ai

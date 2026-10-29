@@ -15,6 +15,7 @@ import {
   KanbanSquareIcon,
   LayoutDashboardIcon,
   LayoutTemplateIcon,
+  MessageCircleIcon,
   MessagesSquareIcon,
   UserCogIcon,
   MegaphoneIcon,
@@ -128,6 +129,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   },
   {
     id: "work",
+      { title: "페퍼", url: "/agents/pepper", icon: <MessageCircleIcon /> },
     label: "실무",
     icon: <SproutIcon />,
     items: [

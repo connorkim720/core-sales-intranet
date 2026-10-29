@@ -7,6 +7,7 @@ import { BellIcon } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { AgentDockToggle } from "@/components/agent-dock";
 import { CommandPaletteTrigger } from "@/components/command-palette";
 import { pageTitle } from "@/lib/page-meta";
 
@@ -26,6 +27,7 @@ export function SiteHeader() {
         </h1>
         <div className="ml-auto flex items-center gap-1">
           <CommandPaletteTrigger />
+          <AgentDockToggle />
           <Button variant="ghost" size="icon" className="relative ml-auto">
             <BellIcon className="size-4" />
           </Button>
